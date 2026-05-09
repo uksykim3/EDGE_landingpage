@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EDGE — 정밀 약점 분석 인프라</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=JetBrains+Mono:wght@300;400;500;600&family=Pretendard:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<style>
+:root {
+  --bg: #0a0a0b;
+  --bg-elev: #111114;
+  --bg-card: #15151a;
+  --line: #26262d;
+  --line-strong: #3a3a44;
+  --text: #f5f5f0;
+  --text-mute: #9a9aa0;
+  --text-dim: #5a5a62;
+  --accent: #d4ff3a;
+  --accent-soft: rgba(212, 255, 58, 0.08);
+  --warn: #ff7a45;
+  --serif: 'Fraunces', 'Pretendard', serif;
+  --sans: 'Pretendard', -apple-system, sans-serif;
+  --mono: 'JetBrains Mono', monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-weight: 400;
+  line-height: 1.6;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Grain overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E");
+  opacity: 0.06;
+  pointer-events: none;
+  z-index: 100;
+  mix-blend-mode: overlay;
+}
+
+/* Prototype banner */
+.proto-banner {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--warn);
+  color: #1a0a00;
+  padding: 8px 24px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border-bottom: 1px solid rgba(0,0,0,0.2);
+}
+.proto-banner .pulse {
+  width: 6px; height: 6px;
+  background: #1a0a00;
+  border-radius: 50%;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* Nav */
+nav {
+  position: sticky;
+  top: 30px;
+  z-index: 40;
+  padding: 24px 48px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(10,10,11,0.7);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line);
+}
+.logo {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.logo-mark {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--accent);
+  letter-spacing: 0.2em;
+}
+.nav-links {
+  display: flex;
+  gap: 32px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+}
+.nav-links a {
+  color: var(--text-mute);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.nav-links a:hover { color: var(--text); }
+
+/* Container */
+.container {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 48px;
+}
+
+/* Hero */
+.hero {
+  padding: 120px 0 100px;
+  position: relative;
+}
+.hero-meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin-bottom: 32px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.hero-meta::before {
+  content: '';
+  width: 32px;
+  height: 1px;
+  background: var(--accent);
+}
+
+.hero h1 {
+  font-family: var(--serif);
+  font-size: clamp(48px, 6.5vw, 92px);
+  font-weight: 400;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+  margin-bottom: 40px;
+  max-width: 1100px;
+}
+.hero h1 em {
+  font-style: italic;
+  font-weight: 300;
+  color: var(--accent);
+}
+.hero h1 .strike {
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+  color: var(--text-dim);
+  font-weight: 300;
+}
+
+.hero-sub {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 80px;
+  margin-top: 64px;
+  padding-top: 32px;
+  border-top: 1px solid var(--line);
+}
+.hero-sub p {
+  color: var(--text-mute);
+  font-size: 17px;
+  line-height: 1.7;
+}
+.hero-sub .quote {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 20px;
+  color: var(--text);
+  position: relative;
+  padding-left: 24px;
+}
+.hero-sub .quote::before {
+  content: '"';
+  position: absolute;
+  left: -8px;
+  top: -8px;
+  font-size: 56px;
+  color: var(--accent);
+  font-family: var(--serif);
+}
+
+/* Section */
+section {
+  padding: 100px 0;
+  border-top: 1px solid var(--line);
+}
+
+.section-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent);
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.section-label .num {
+  color: var(--text-dim);
+}
+
+.section-title {
+  font-family: var(--serif);
+  font-size: clamp(36px, 4.5vw, 56px);
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  margin-bottom: 24px;
+  max-width: 900px;
+}
+.section-title em {
+  font-style: italic;
+  color: var(--accent);
+}
+
+/* Problem section */
+.problem-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--line);
+  margin-top: 64px;
+  border: 1px solid var(--line);
+}
+.problem-card {
+  background: var(--bg);
+  padding: 40px;
+  position: relative;
+}
+.problem-card .label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+.problem-card h3 {
+  font-family: var(--serif);
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1.3;
+  margin-bottom: 12px;
+}
+.problem-card p {
+  color: var(--text-mute);
+  font-size: 15px;
+}
+.problem-card.highlight {
+  background: var(--bg-elev);
+}
+.problem-card.highlight h3 {
+  color: var(--accent);
+  font-style: italic;
+}
+
+/* Diagnostic comparison */
+.diagnostic {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  padding: 48px;
+  margin-top: 48px;
+  font-family: var(--mono);
+  font-size: 14px;
+}
+.diag-row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 32px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--line);
+}
+.diag-row:last-child { border-bottom: none; }
+.diag-row .tag {
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  padding-top: 4px;
+}
+.diag-row .content {
+  color: var(--text);
+}
+.diag-row.before .content {
+  color: var(--text-dim);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+.diag-row.after .content {
+  color: var(--accent);
+  font-weight: 500;
+}
+.diag-row.after .content strong {
+  background: var(--accent-soft);
+  padding: 2px 6px;
+  border-radius: 2px;
+}
+
+/* Tech specs */
+.specs-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  margin-top: 64px;
+}
+.spec {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  padding: 32px;
+  position: relative;
+  transition: border-color 0.3s;
+}
+.spec:hover {
+  border-color: var(--line-strong);
+}
+.spec-num {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent);
+  letter-spacing: 0.2em;
+  margin-bottom: 24px;
+}
+.spec h4 {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.3;
+  margin-bottom: 16px;
+}
+.spec p {
+  color: var(--text-mute);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.spec .metric {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.spec .metric-num {
+  font-family: var(--serif);
+  font-size: 32px;
+  font-weight: 500;
+  color: var(--accent);
+  letter-spacing: -0.02em;
+}
+.spec .metric-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* Data viz block */
+.data-block {
+  margin-top: 64px;
+  padding: 48px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  gap: 48px;
+  align-items: center;
+}
+.data-block-text h3 {
+  font-family: var(--serif);
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.3;
+  margin-bottom: 16px;
+}
+.data-block-text p {
+  color: var(--text-mute);
+  font-size: 15px;
+  margin-bottom: 24px;
+}
+.data-block-text .source {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+}
+
+.years-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+.year-box {
+  aspect-ratio: 1;
+  border: 1px solid var(--line-strong);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  position: relative;
+  background: var(--bg);
+}
+.year-box .y {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text);
+}
+.year-box .c {
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+  margin-top: 4px;
+}
+.year-box.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.year-box.active .y { color: var(--accent); }
+
+/* Benefits */
+.benefits-list {
+  margin-top: 64px;
+  border-top: 1px solid var(--line);
+}
+.benefit {
+  padding: 48px 0;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: 80px 1fr 1fr;
+  gap: 48px;
+  align-items: start;
+  transition: padding 0.3s;
+}
+.benefit:hover {
+  padding-left: 16px;
+}
+.benefit-num {
+  font-family: var(--serif);
+  font-size: 48px;
+  font-weight: 300;
+  color: var(--accent);
+  font-style: italic;
+  line-height: 1;
+}
+.benefit h3 {
+  font-family: var(--serif);
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.3;
+  margin-bottom: 12px;
+}
+.benefit .lead {
+  color: var(--text-mute);
+  font-size: 15px;
+}
+.benefit-detail {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text-mute);
+  line-height: 1.7;
+  padding-left: 24px;
+  border-left: 1px solid var(--accent);
+}
+.benefit-detail .highlight {
+  color: var(--accent);
+}
+
+/* CTA */
+.cta-section {
+  padding: 140px 0;
+  text-align: center;
+  border-top: 1px solid var(--line);
+  position: relative;
+  overflow: hidden;
+}
+.cta-section::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, var(--accent-soft) 0%, transparent 60%);
+  pointer-events: none;
+}
+.cta-section .container { position: relative; }
+.cta-headline {
+  font-family: var(--serif);
+  font-size: clamp(40px, 5.5vw, 72px);
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  margin-bottom: 24px;
+}
+.cta-headline em {
+  font-style: italic;
+  color: var(--accent);
+}
+.cta-sub {
+  color: var(--text-mute);
+  font-size: 17px;
+  margin-bottom: 56px;
+}
+.cta-buttons {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.cta-note {
+  margin-top: 32px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  letter-spacing: 0.05em;
+}
+.btn {
+  padding: 18px 32px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+.btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0a0a0b;
+  font-weight: 600;
+}
+.btn.primary:hover {
+  background: transparent;
+  color: var(--accent);
+}
+.btn .arrow {
+  transition: transform 0.2s;
+}
+.btn:hover .arrow {
+  transform: translateX(4px);
+}
+
+/* Footer */
+footer {
+  padding: 60px 0 40px;
+  border-top: 1px solid var(--line);
+}
+.footer-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+}
+.footer-row .copy {
+  text-transform: uppercase;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  nav { padding: 20px 24px; }
+  .nav-links { display: none; }
+  .container { padding: 0 24px; }
+  .hero { padding: 80px 0 60px; }
+  .hero-sub { grid-template-columns: 1fr; gap: 40px; }
+  .problem-grid { grid-template-columns: 1fr; }
+  .specs-grid { grid-template-columns: 1fr; }
+  .data-block { grid-template-columns: 1fr; padding: 32px; }
+  .benefit { grid-template-columns: 1fr; gap: 16px; }
+  .benefit-detail { padding-left: 0; padding-top: 16px; border-left: none; border-top: 1px solid var(--accent); }
+  .diagnostic { padding: 24px; }
+  .diag-row { grid-template-columns: 1fr; gap: 8px; }
+  section { padding: 60px 0; }
+}
+
+/* Animations on scroll */
+.reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.8s ease, transform 0.8s ease;
+}
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+</style>
+</head>
+<body>
+
+<div class="proto-banner">
+  <span class="pulse"></span>
+  <span>PROTOTYPE · 시제품 테스트 중 · 비공개 베타 운영</span>
+  <span class="pulse"></span>
+</div>
+
+<nav>
+  <div class="logo">
+    <span>EDGE</span>
+    <span class="logo-mark">/ IMS v0.1</span>
+  </div>
+  <div class="nav-links">
+    <a href="#problem">문제 인식</a>
+    <a href="#solution">솔루션</a>
+    <a href="#benefit">기대 효과</a>
+    <a href="#cta">데모 신청</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="container">
+    <div class="hero-meta">
+      <span>Insight Management Solution for Math Academies</span>
+    </div>
+    <h1>
+      <span class="strike">문제은행</span>이 아니라,<br>
+      <em>사고의 단절 지점</em>을<br>
+      해부하는 인프라.
+    </h1>
+    <div class="hero-sub">
+      <p class="quote">
+        우리 아이는 함수를 모르는 게 아니라, 왜 특정 고난도 문항에서만 막히는 걸까요?
+      </p>
+      <p>
+        학부모의 이 질문에 답할 수 있는 건 베테랑 원장의 직관뿐이었습니다.
+        EDGE는 그 직관을, 데이터로 재현합니다.
+        문제를 공급하는 LMS가 아닌, 학생의 사고 과정 중 어느 지점에서 논리적 단절이 발생했는지 진단하는 IMS입니다.
+      </p>
+    </div>
+  </div>
+</header>
+
+<section id="problem">
+  <div class="container">
+    <div class="section-label">
+      <span class="num">01 /</span>
+      <span>The Bottleneck</span>
+    </div>
+    <h2 class="section-title">
+      학원 운영의 진짜 병목은<br>
+      <em>강사 개인의 역량</em>입니다.
+    </h2>
+
+    <div class="problem-grid">
+      <div class="problem-card">
+        <div class="label">// Surface Diagnosis</div>
+        <h3>"삼각함수가 약하다"의 한계</h3>
+        <p>학부모: "그래서 뭘 어떻게 보충하나요?" / 원장: "…삼각함수 문제를 더 풀려야죠." 단원 단위 진단으로는 학부모를 설득할 수 없습니다.</p>
+      </div>
+      <div class="problem-card">
+        <div class="label">// Retention Risk</div>
+        <h3>"우리 애는 진짜 늘고 있나요?"</h3>
+        <p>3개월차 학부모의 의심에 답할 데이터가 없습니다. "성실히 하고 있어요"라는 정성적 평가로는 재등록 결정의 근거가 되지 못합니다.</p>
+      </div>
+      <div class="problem-card">
+        <div class="label">// Single Point of Failure</div>
+        <h3>원장 1인에게 묶인 분석 역량</h3>
+        <p>킬러 문항 오답 분석은 원장의 일과를 가장 많이 차지하는 노동입니다. 원생이 늘수록 원장의 시간은 오답지 위에서 사라지고, 다른 누구도 그 일을 대신하지 못합니다.</p>
+      </div>
+      <div class="problem-card highlight">
+        <div class="label">// The Real Bottleneck</div>
+        <h3>강사 한 명에게 묶인 노하우</h3>
+        <p>학생 한 명을 가장 잘 아는 강사가 그만두는 순간, 누적된 진단·상담 노하우도 함께 사라집니다. 이전·복제 불가능한 개인 자산 위에 학원이 운영됩니다.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="solution">
+  <div class="container">
+    <div class="section-label">
+      <span class="num">02 /</span>
+      <span>Methodology</span>
+    </div>
+    <h2 class="section-title">
+      단원이 아니라,<br>
+      <em>사고의 연결고리</em>를 진단합니다.
+    </h2>
+
+    <div class="diagnostic">
+      <div class="diag-row before">
+        <span class="tag">기존 진단</span>
+        <span class="content">"이 학생은 삼각함수 단원이 약합니다."</span>
+      </div>
+      <div class="diag-row after">
+        <span class="tag">EDGE 진단</span>
+        <span class="content">
+          삼각방정식 해의 개수 문항에서, <strong>그래프의 주기와 대칭성을 활용하는 논리적 연결</strong>이 누락됨.
+          → 예상 보완 기간 14일 / 예상 점수 상승 +8점
+        </span>
+      </div>
+    </div>
+
+    <div class="specs-grid">
+      <div class="spec">
+        <div class="spec-num">— 01</div>
+        <h4>Semi-Micro 진단 입자도</h4>
+        <p>"단원이 약하다"가 아닌, 풀이 논리의 정확한 단절 지점을 짚습니다. 학부모에게 추상적 지적이 아닌 구체적 좌표를 제공합니다.</p>
+        <div class="metric">
+          <span class="metric-num">10s</span>
+          <span class="metric-label">분석 소요 시간</span>
+        </div>
+      </div>
+      <div class="spec">
+        <div class="spec-num">— 02</div>
+        <h4>풀이 논리 데이터베이스</h4>
+        <p>2022~2026학년도 평가원·교육청 기출 전 문항을 풀이 논리 단위로 해체하여 구축. 단순 정답 매칭이 아닌 사고 경로 매칭.</p>
+        <div class="metric">
+          <span class="metric-num">5y</span>
+          <span class="metric-label">기출 데이터 범위</span>
+        </div>
+      </div>
+      <div class="spec">
+        <div class="spec-num">— 03</div>
+        <h4>상담 스크립트 자동 출력</h4>
+        <p>오답 번호 입력 → 약점 지점 + 학부모용 상담 스크립트 즉시 출력. 신입 강사도 베테랑 수준의 상담 가능.</p>
+        <div class="metric">
+          <span class="metric-num">+0</span>
+          <span class="metric-label">학습 곡선</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="data-block">
+      <div class="data-block-text">
+        <h3>5개년 기출을 풀이 논리 단위로 해체.<br>2028 개편 체제 기준으로 재분류.</h3>
+        <p>단순한 OCR이 아닙니다. 각 문항이 요구하는 사고의 단계를 수작업으로 분해하고, 학생의 오답이 어느 단계에서 발생했는지 역추적할 수 있도록 설계했습니다. 분류 체계는 2028학년도 개편 수능 기준에 맞춰, 현재 고2·고3은 물론 향후 입시 변화에도 그대로 사용 가능합니다.</p>
+        <div class="source">// SOURCE: KICE · 17개 시·도 교육청 / 평가원 6·9·수능 전체<br>// CLASSIFICATION: 2028학년도 개편 체제 기준</div>
+      </div>
+      <div class="years-grid">
+        <div class="year-box active">
+          <span class="y">'22</span><span class="c">DECODED</span>
+        </div>
+        <div class="year-box active">
+          <span class="y">'23</span><span class="c">DECODED</span>
+        </div>
+        <div class="year-box active">
+          <span class="y">'24</span><span class="c">DECODED</span>
+        </div>
+        <div class="year-box active">
+          <span class="y">'25</span><span class="c">DECODED</span>
+        </div>
+        <div class="year-box active">
+          <span class="y">'26</span><span class="c">DECODED</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="benefit">
+  <div class="container">
+    <div class="section-label">
+      <span class="num">03 /</span>
+      <span>What Changes</span>
+    </div>
+    <h2 class="section-title">
+      기존 시스템과 충돌하지 않습니다.<br>
+      <em>가장 위에 얹어</em> 사용하십시오.
+    </h2>
+
+    <div class="benefits-list">
+      <div class="benefit">
+        <div class="benefit-num">i.</div>
+        <div>
+          <h3>원장의 업무 고도화</h3>
+          <p class="lead">수십 분이 소요되던 기출 오답 분석이 10초로 단축됩니다.</p>
+        </div>
+        <div class="benefit-detail">
+          INPUT &gt; 학생 오답 번호<br>
+          OUTPUT &gt; <span class="highlight">핵심 약점 좌표 + 상담 스크립트</span><br>
+          TIME &gt; <span class="highlight">≈ 10s</span>
+        </div>
+      </div>
+
+      <div class="benefit">
+        <div class="benefit-num">ii.</div>
+        <div>
+          <h3>강사 관리 역량의 상향 평준화</h3>
+          <p class="lead">신입 강사·조교가 상담을 진행해도, 베테랑 원장과 동일한 수준의 진단을 학부모에게 전달합니다.</p>
+        </div>
+        <div class="benefit-detail">
+          BEFORE &gt; 강사별 편차 발생<br>
+          AFTER &gt; <span class="highlight">데이터 기반 일관성 확보</span><br>
+          IMPACT &gt; <span class="highlight">상담 리스크 ↓</span>
+        </div>
+      </div>
+
+      <div class="benefit">
+        <div class="benefit-num">iii.</div>
+        <div>
+          <h3>데이터 기반 학부모 신뢰 확보</h3>
+          <p class="lead">PDF 리포트 자동 생성. 약점 보완 시 예상 상승 점수를 수치로 제시하여, 등록·연장의 객관적 명분을 만듭니다.</p>
+        </div>
+        <div class="benefit-detail">
+          DELIVERABLE &gt; PDF Report<br>
+          CONTAINS &gt; <span class="highlight">사고 오류 좌표 + 예상 점수 +Δ</span><br>
+          USE CASE &gt; <span class="highlight">등록 / 연장 상담</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="cta" class="cta-section">
+  <div class="container">
+    <h2 class="cta-headline">
+      직관의 시대는 끝났습니다.<br>
+      <em>데이터로 사고를 장악</em>하십시오.
+    </h2>
+    <p class="cta-sub">
+      EDGE는 기존 문제은행 위에 얹는 프리미엄 상담·관리 인프라입니다.<br>
+      설명 듣기 전에, 우리 학원 데이터로 직접 검증하십시오.
+    </p>
+    <div class="cta-buttons">
+      <a href="https://docs.google.com/forms/d/e/1FAIpQLSdk6QX-Efs_HIYpRIGRAuHXgXSOWdwkqeqe7JS7gFYBmYlj9Q/viewform" target="_blank" rel="noopener" class="btn primary">
+        학원코드 발급 신청 — 무료 체험 시작 <span class="arrow">→</span>
+      </a>
+    </div>
+    <p class="cta-note">
+      ※ 검토 후 영업일 기준 1~2일 내 이메일로 학원코드와 사용 안내가 발송됩니다.
+    </p>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-row">
+      <div class="copy">© 2026 EDGE · Insight Management Solution</div>
+      <div>v0.1 · PROTOTYPE BUILD · NOT FOR DISTRIBUTION</div>
+    </div>
+  </div>
+</footer>
+
+<script>
+// Scroll reveal
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+    }
+  });
+}, { threshold: 0.1 });
+
+document.querySelectorAll('.problem-card, .spec, .benefit, .data-block, .diagnostic').forEach(el => {
+  el.classList.add('reveal');
+  observer.observe(el);
+});
+</script>
+
+</body>
+</html>
